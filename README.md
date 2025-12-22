@@ -31,3 +31,27 @@ Em caso de falhas no sistema, é persistido o estado atual do pagamento antes e 
 . RECUSADO - significa que o estado de processamento foi concluído com sucesso mas o pagamento não foi aprovado devido a alguma condição inválida. Estado final.
 
 . FALHA - signfica que o estado de processamento fi concluído com sucesso mas o pagamento não foi finalizado devido a algum erro técnico, falha na infraestrutura ou exceção inesperada. Estado final.
+
+# Modelo de Domínio
+
+## Entidade: pagamento
+
+Tarefa única de cobrar um valor do cliente, pode ser processada uma única vez retornando exatamente um estado final.
+
+### Atributos
+
+A entidade deve conter identificador único de acesso, uma chave lógica de pagamento para garantir que duas ou mais requisições tenham o mesmo resultado, o valor e a moeda que serão processados, os estados transitórios ou finais, data de criação e de finalização do processo para controle de linha do tempo.
+
+Sendo assim, devem ser atributos imutáveis: valor, moeda e estado do pagamento.
+
+# Garantias do Sistema
+
+. Um pagamento nunca pode ser aprovado duas vezes.
+
+. Requisições duplicadas geram o mesmo resultado.
+
+. Falhas no sistema não gera aprovações.
+
+. Pagamentos nunca mudam de estado.
+
+. Estado inconsistente resulta em falha.
