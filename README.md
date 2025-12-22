@@ -55,3 +55,80 @@ Sendo assim, devem ser atributos imutáveis: valor, moeda e estado do pagamento.
 . Pagamentos nunca mudam de estado.
 
 . Estado inconsistente resulta em falha.
+
+# Pseudocódigo
+
+    TIPO STATUS: ENUM (
+        RECEBIDO;
+        PROCESSANDO;
+        APROVADO;
+        RECUSADO;
+        FALHA
+    )
+
+    VAR
+
+        solicitacao: REGISTRO
+            id: INTEIRO
+            chave_idempontecia: INTEIRO
+            dados_pagamento: REGISTRO
+            status_atual: STATUS
+        FIM_REGISTRO
+
+        resultado: STATUS
+
+    FUNCAO pagamento(solicitacao): solicitacao
+    INICIO
+
+        solicitacao.status_atual <- STATUS.RECEBIDO
+        
+        INICIAR_TRANSACAO
+        
+        // verifica existencia da solicitação a partir da chave_idempotencia via restrição no banco de
+        // dados (constranint), se ja existe, retorna o resultado atual da primeira solicitação e fina-
+        // liza a funcao pagamento
+        SE existe chave_idempotencia ENTAO
+            SE solicitacao.status_atual = APROVADO ou RECUSADO ou FALHA ENTAO (xOU)
+                retorna solicitacao.status_atual
+            FIMSE
+
+            SE solicitacao.status_atual = PROCESSANDO ENTAO
+                SE lease não expirou ENTAO
+                    COMMIT
+                    retorne solicitacao.status_atual
+                    
+                SENAO SE lease expirou ENTAO
+                    renovar lease
+
+                FIMSE
+            FIMSE
+        FIMSE
+
+        
+
+        // se for possível inserir solicitação, se não for possível, o fluxo deve retornar
+        solicitacao.status_atual = PROCESSANDO
+        atribuir lease (1m)
+
+        TENTAR
+            // chama gateway para aprovação ou não do pagamento, retornando resultado
+            resultado <- gateway(solicitacao.dados_pagamento)
+
+            solicitacao.status <- resultado 
+    
+            COMMIT
+            retorne solicitacao.status
+        CAPTURAR
+            // se houve erro técnico inesperado
+            propagar erro
+        FIM
+
+    FIMFUNCAO
+
+    FUNCAO gateway(requisicao)
+    INICIO
+
+    1. regra de negocio do sistema
+    2. retorna FALHA, APROVADO ou RECUSADO
+
+    FIMFUNCAO
