@@ -56,14 +56,55 @@ Sendo assim, devem ser atributos imutáveis: valor, moeda e estado do pagamento.
 
 . Estado inconsistente resulta em falha.
 
+# Modelo de Autoridade
+
+---
+
+## Cliente
+
+O cliente deve solicitar pagamento e consultar status atual da solicitação. Ele não pode reprocessar a solicitação, nem cancelar ou decidir o resultado.
+
+---
+
+## Sistema (API)
+
+O sistema pode PROCESSAR a solicitação, executar as regras de negócio deo pagamento uma vez e retornar uma resposta, caso houver. Ele não pode solicitar de novo o gateway, retroceder status atual ou decidir casos de PROCESSANDO incertos.
+
+---
+
+## Job (BATCH)
+
+O job detecta solicitações em processo com lease expirado, muda status atual para EM_ANALISE, notifica e gera relatório do problema. Ele não chama regra de negócio (gateway) e não altera status da solicitação para um estado FINAL.
+
+---
+
+## Intervenção Humana
+
+A intervenção humana possui autoridade excepcional, o desenvolvedor pode analisar o relatório gerado pelo job, resolver o problmea ou cancelar adminstrativamente (CANCELADO_ADMINISTRADOR).
+
+# Transições de Estado
+
+ESTADOS TRANSICIONAIS: PROCESSANDO; EM_ANALISE.
+
+ESTADOS FINAIS: APROVADO; RECUSADO; FALHA; CANCELADO_ADMINISTRADOR.
+
+Estado transacional muda para estado final. Estado final é imutável.
+
+## Transições Proibidas
+
+    PROCESSANDO -> CANCELADO_ADMINISTRADOR
+    EM_ANALISE -> PROCESSANDO
+    Qualquer estado final -> Outro estado (Estado final deve ser imutável)
+
 # Pseudocódigo
 
     TIPO STATUS: ENUM (
-        RECEBIDO;
         PROCESSANDO;
+        EM_ANALISE;
         APROVADO;
         RECUSADO;
-        FALHA
+        FALHA;
+        CANCELADO_ADMINSTRADOR
     )
 
     VAR
