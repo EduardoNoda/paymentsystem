@@ -1,4 +1,4 @@
-
+# Sistema de Pagamento em Java
 [](https://github.com/EduardoNoda/paymentsystem#sistema-de-pagamentos-em-java)
 
 Este projeto implementa o núcleo do processamento de pagamentos com cartão de crédito (simulado), focado em garantir consistência de estado e idempotência em cenários de falha, concorrência e requisições duplicadas.
