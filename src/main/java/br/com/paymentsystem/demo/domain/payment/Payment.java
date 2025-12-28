@@ -37,10 +37,10 @@ public class Payment {
     @Column(name = "client_snapshot", columnDefinition = "jsonb", nullable = false)
     private String clientSnapshot;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
+    @Column(name = "updated_at", insertable = false, updatable = false)
     private OffsetDateTime updatedAt;
 
     @Column(name = "finalized_at")
