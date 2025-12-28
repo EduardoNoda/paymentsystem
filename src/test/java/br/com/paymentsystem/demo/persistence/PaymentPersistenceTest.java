@@ -1,5 +1,6 @@
 package br.com.paymentsystem.demo.persistence;
 
+import br.com.paymentsystem.demo.AbstractPostgresTest;
 import br.com.paymentsystem.demo.domain.payment.Payment;
 import br.com.paymentsystem.demo.domain.payment.PaymentStatus;
 import jakarta.persistence.EntityManager;
@@ -8,12 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.annotation.Transactional;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.shaded.com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
@@ -26,20 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @Testcontainers
 @Transactional
 @ActiveProfiles("test")
-public class PaymentPersistenceTest {
-    @Container
-    static PostgreSQLContainer postgres =
-            new PostgreSQLContainer("postgres:16")
-                    .withDatabaseName("payment_test")
-                    .withUsername("pgsql")
-                    .withPassword("pgsql");
-
-    @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-    }
+public class PaymentPersistenceTest extends AbstractPostgresTest {
 
     @Autowired
     private EntityManager em;
@@ -134,6 +118,33 @@ public class PaymentPersistenceTest {
         payment.setStatus(PaymentStatus.APPROVED);
 
         // Banco decide
+        assertThrows(PersistenceException.class, () -> em.flush());
+    }
+
+    @Test
+    void should_fail_on_duplicate_idempotency_key() {
+        Payment firstPayment = new Payment();
+        firstPayment.setIdempotencyKey("idem-duplicated");
+        firstPayment.setAmount(new BigDecimal("50.00"));
+        firstPayment.setCurrency("BRL");
+        firstPayment.setClientSnapshot("{ }");
+        firstPayment.setStatus(PaymentStatus.RECEIVED);
+        firstPayment.setCreatedAt(OffsetDateTime.now());
+        firstPayment.setUpdatedAt(OffsetDateTime.now());
+
+        em.persist(firstPayment);
+        em.flush();
+
+        Payment duplicatePayment = new Payment();
+        duplicatePayment.setIdempotencyKey("idem-duplicated");
+        duplicatePayment.setAmount(new BigDecimal("50.00"));
+        duplicatePayment.setCurrency("BRL");
+        duplicatePayment.setClientSnapshot("{ }");
+        duplicatePayment.setStatus(PaymentStatus.RECEIVED);
+        duplicatePayment.setCreatedAt(OffsetDateTime.now());
+        duplicatePayment.setUpdatedAt(OffsetDateTime.now());
+
+        em.persist(duplicatePayment);
         assertThrows(PersistenceException.class, () -> em.flush());
     }
 }
