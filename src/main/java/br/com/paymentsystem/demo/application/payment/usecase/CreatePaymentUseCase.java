@@ -27,7 +27,7 @@ public class CreatePaymentUseCase {
     public Payment execute(CreatePaymentCommand command) {
         actionOriginContext.set(ActionOrigin.API);
 
-        Payment payment = new Payment();
+        Payment payment = Payment.create(command.idempotencyKey(), command.amount(), command.currency());
         payment.setIdempotencyKey(command.idempotencyKey());
         payment.setAmount(command.amount());
         payment.setCurrency(command.currency());
