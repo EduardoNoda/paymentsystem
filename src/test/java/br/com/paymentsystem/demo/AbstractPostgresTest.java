@@ -17,8 +17,8 @@ public class AbstractPostgresTest {
     static PostgreSQLContainer postgres =
             new PostgreSQLContainer("postgres:16")
                     .withDatabaseName("payment_test")
-                    .withUsername("pgsql")
-                    .withPassword("pgsql");
+                    .withUsername("postgres")
+                    .withPassword("postgres");
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
