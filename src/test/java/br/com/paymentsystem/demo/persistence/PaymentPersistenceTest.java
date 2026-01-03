@@ -33,10 +33,7 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
     void should_insert_payment() throws Exception {
 
         ObjectMapper mapper = new ObjectMapper();
-        Payment payment = new Payment();
-        payment.setIdempotencyKey("idem-123");
-        payment.setAmount(new BigDecimal("100.00"));
-        payment.setCurrency("BRL");
+        Payment payment = Payment.create("idem-123", new BigDecimal("100.00"), "BRL");
         payment.setClientSnapshot("""
                     {"clientId": "123","origin":"API"}
                 """);
@@ -74,10 +71,7 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
     @Test
     void should_fail_on_illegal_status_transition() {
         // cria pagamento válido
-        Payment payment = new Payment();
-        payment.setIdempotencyKey("idem-transition");
-        payment.setAmount(new BigDecimal("80.00"));
-        payment.setCurrency("BRL");
+        Payment payment = Payment.create("idem-transitor", new BigDecimal(80.00), "BRL");
         payment.setClientSnapshot("{}");
         payment.setStatus(PaymentStatus.RECEIVED);
         payment.setCreatedAt(OffsetDateTime.now());
@@ -102,10 +96,7 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
 
     @Test
     void java_should_not_block_invalid_state_change() {
-        Payment payment = new Payment();
-        payment.setIdempotencyKey("idem-java");
-        payment.setAmount(new BigDecimal("30.00"));
-        payment.setCurrency("BRL");
+        Payment payment = Payment.create("idem-java", new BigDecimal("30.00"), "BRL");
         payment.setClientSnapshot("{}");
         payment.setStatus(PaymentStatus.RECEIVED);
         payment.setCreatedAt(OffsetDateTime.now());
@@ -123,10 +114,7 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
 
     @Test
     void should_fail_on_duplicate_idempotency_key() {
-        Payment firstPayment = new Payment();
-        firstPayment.setIdempotencyKey("idem-duplicated");
-        firstPayment.setAmount(new BigDecimal("50.00"));
-        firstPayment.setCurrency("BRL");
+        Payment firstPayment = Payment.create("idem-duplicated", new BigDecimal("50.00"), "BRL");
         firstPayment.setClientSnapshot("{ }");
         firstPayment.setStatus(PaymentStatus.RECEIVED);
         firstPayment.setCreatedAt(OffsetDateTime.now());
@@ -135,10 +123,7 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
         em.persist(firstPayment);
         em.flush();
 
-        Payment duplicatePayment = new Payment();
-        duplicatePayment.setIdempotencyKey("idem-duplicated");
-        duplicatePayment.setAmount(new BigDecimal("50.00"));
-        duplicatePayment.setCurrency("BRL");
+        Payment duplicatePayment = Payment.create("idem-duplicated", new BigDecimal(50.00), "BRL");
         duplicatePayment.setClientSnapshot("{ }");
         duplicatePayment.setStatus(PaymentStatus.RECEIVED);
         duplicatePayment.setCreatedAt(OffsetDateTime.now());
