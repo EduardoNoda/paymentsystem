@@ -2,6 +2,7 @@ package br.com.paymentsystem.demo.domain.payment;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -15,7 +16,7 @@ import java.time.OffsetDateTime;
 @Getter
 @Setter
 @Entity
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "payment")
 public class Payment {
 
@@ -52,4 +53,18 @@ public class Payment {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentStatus status;
+
+    public static Payment create(
+            String idempotencyKey,
+            BigDecimal amount,
+            String currency
+    ) {
+        Payment p = new Payment();
+        p.idempotencyKey = idempotencyKey;
+        p.amount = amount;
+        p.currency = currency;
+        p.status = PaymentStatus.TO_ANALYZE;
+        return p;
+    }
+
 }
