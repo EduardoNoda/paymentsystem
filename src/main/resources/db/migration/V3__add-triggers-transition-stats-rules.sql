@@ -11,7 +11,7 @@ BEGIN
         (OLD.status = 'TO_ANALYZE' AND NEW.status IN ('PROCESSING', 'CANCEL_ADMIN'))
     ) THEN
         RAISE EXCEPTION
-            'Invalid payment status transition % -> % for payment %', OLD.status, NEW.status, OLD.id;
+            'Invalid payment status transition %s -> %s for payment %I', OLD.status, NEW.status, OLD.id;
     END IF;
 
     RETURN NEW;
@@ -52,7 +52,7 @@ BEGIN
            OLD.status = 'PROCESSING' AND NEW.status IN ('APPROVED', 'RECUSED', 'FAIL')
         ) THEN
             RAISE EXCEPTION
-                'API not allowed to perform transition % -> %',
+                'API not allowed to perform transition %s -> %s',
                 OLD.status, NEW.status;
            END IF;
 
@@ -62,19 +62,19 @@ BEGIN
                 OLD.status = 'TO_ANALYZE' AND NEW.status = 'PROCESSING'
            ) THEN
                 RAISE EXCEPTION
-                    'JOB not allowed to perform transition % -> %',
+                    'JOB not allowed to perform transition %s -> %s',
                     OLD.status, NEW.status;
            END IF;
 
        ELSIF origin = 'ADMIN' THEN
            IF OLD.status <> 'TO_ANALYZE' THEN
                RAISE EXCEPTION
-                   'ADMIN not allowed to perform transition % -> %',
+                   'ADMIN not allowed to perform transition %s -> %s',
                    OLD.status, NEW.status;
            END IF;
 
        ELSE
-           RAISE EXCEPTION 'Unknown action origin: %', origin;
+           RAISE EXCEPTION 'Unknown action origin: %s', origin;
        END IF;
 
     RETURN NEW;
@@ -103,7 +103,7 @@ BEGIN
         AND OLD.lease_expires_at > now()
     THEN
         RAISE EXCEPTION
-            'Payment % is locked until %',
+            'Payment %s is locked until %L',
             OLD.id, OLD.lease_expires_at;
     END IF;
 
@@ -156,7 +156,7 @@ BEGIN
         NEW.id,
         NEW.status,
         current_action_origin(),
-        format('Status changed from % to %', OLD.status, NEW.status),
+        format('Status changed from %s to %s', OLD.status, NEW.status),
         now()
     );
 
