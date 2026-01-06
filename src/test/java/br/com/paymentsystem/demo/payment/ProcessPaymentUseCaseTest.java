@@ -1,13 +1,18 @@
 package br.com.paymentsystem.demo.payment;
 
 import br.com.paymentsystem.demo.application.payment.command.PaymentLockManager;
+import br.com.paymentsystem.demo.application.payment.port.ActionOrigin;
 import br.com.paymentsystem.demo.application.payment.port.GatewayResult;
 import br.com.paymentsystem.demo.application.payment.port.PaymentDataAnalyzer;
 import br.com.paymentsystem.demo.application.payment.usecase.ProcessPaymentUseCase;
 import br.com.paymentsystem.demo.domain.payment.Payment;
+import br.com.paymentsystem.demo.domain.payment.PaymentLeasePolicy;
 import br.com.paymentsystem.demo.domain.payment.PaymentRepository;
 import br.com.paymentsystem.demo.domain.payment.PaymentStatus;
 import br.com.paymentsystem.demo.exception.GatewayCommunicationException;
+import br.com.paymentsystem.demo.exception.PaymentAlreadyBeingProcessException;
+import br.com.paymentsystem.demo.infrastructure.dto.PaymentGatewayRequest;
+import br.com.paymentsystem.demo.infrastructure.gateway.FakePaymentGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,13 +32,16 @@ class ProcessPaymentUseCaseTest {
     PaymentRepository paymentRepository;
 
     @Mock
-    FakePaymentGateway fakePaymentGateway;
-
-    @Mock
     PaymentDataAnalyzer paymentDataAnalyzer;
 
     @Mock
+    FakePaymentGateway fakePaymentGateway;
+
+    @Mock
     PaymentLockManager paymentLockManager;
+
+    @Mock
+    PaymentLeasePolicy paymentLeasePolicy;
 
     ProcessPaymentUseCase useCase;
 
@@ -43,7 +51,8 @@ class ProcessPaymentUseCaseTest {
                 paymentRepository,
                 fakePaymentGateway,
                 paymentLockManager,
-                paymentDataAnalyzer
+                paymentDataAnalyzer,
+                paymentLeasePolicy
         );
     }
 
@@ -51,81 +60,62 @@ class ProcessPaymentUseCaseTest {
        TESTE 1 — Só processa pagamentos em RECEIVED
        ====================================================== */
     @Test
-    void should_reject_processing_if_payment_is_not_received() {
+    void should_not_process_when_lease_policy_denies_attempt() {
 
         Payment payment = Payment.create(
-                "idem-not-received",
+                "idem-blocked",
                 new BigDecimal("100.00"),
                 "BRL"
         );
-        payment.setStatus(PaymentStatus.PROCESSING);
 
-        when(paymentRepository.findByIdempotencyKey("idem-not-received"))
+        when(paymentRepository.findByIdempotencyKey("idem-blocked"))
                 .thenReturn(Optional.of(payment));
 
-        GatewayCommunicationException ex = assertThrows(
-                GatewayCommunicationException.class,
-                () -> useCase.execute("idem-not-received")
+        when(paymentLeasePolicy.canAttemptProcessing(
+                eq(payment),
+                any(),
+                eq(ActionOrigin.API)
+        )).thenReturn(false);
+
+        assertThrows(
+                PaymentAlreadyBeingProcessException.class,
+                () -> useCase.execute("idem-blocked", ActionOrigin.API)
         );
 
-        assertTrue(ex.getMessage().contains("RECEIVED"));
-
         verifyNoInteractions(fakePaymentGateway);
-        verify(paymentRepository, never()).save(any());
     }
+
 
     /* ======================================================
        TESTE 2 — Gateway ERROR aborta processamento
        ====================================================== */
     @Test
-    void should_abort_processing_when_gateway_errors() {
+    void should_throw_gateway_exception_when_gateway_errors() {
 
         Payment payment = Payment.create(
                 "idem-error",
                 new BigDecimal("50.00"),
                 "BRL"
         );
-        payment.setStatus(PaymentStatus.RECEIVED);
 
-        // payment encontrado
         when(paymentRepository.findByIdempotencyKey("idem-error"))
                 .thenReturn(Optional.of(payment));
 
-        // lock lógico sempre concedido
-        when((paymentLockManager).tryAcquire("idem-error")).thenReturn(true);
+        when(paymentLeasePolicy.canAttemptProcessing(any(), any(), any()))
+                .thenReturn(true);
 
-        // lease físico concedido (updatedRows == 1)
-        when(paymentRepository.tryAcquireLease(
-                eq("idem-error"),
-                any(),
-                any()
-        )).thenReturn(1);
+        when(paymentRepository.tryAcquireLease(any(), any(), any()))
+                .thenReturn(1);
 
-        // gateway retorna erro técnico
-        when(fakePaymentGateway.process(payment))
+        when(fakePaymentGateway.process(any(PaymentGatewayRequest.class)))
                 .thenReturn(GatewayResult.ERROR);
 
-        // execução deve abortar com IllegalStateException
         assertThrows(
                 GatewayCommunicationException.class,
-                () -> useCase.execute("idem-error")
+                () -> useCase.execute("idem-error", ActionOrigin.API)
         );
 
-        // estado foi movido para PROCESSING antes do erro
         assertEquals(PaymentStatus.PROCESSING, payment.getStatus());
-
-        // lease foi atribuído
-        //assertNotNull(payment.getLeaseExpiresAt());
-
-        assertThrows(GatewayCommunicationException.class, () ->
-            useCase.execute("idem-error")
-        );
-
-        // gateway foi chamado
-        verify(fakePaymentGateway).process(payment);
-
-        // nenhuma persistência final foi feita
-        verify(paymentRepository, never()).save(any());
     }
 
 
@@ -133,40 +123,34 @@ class ProcessPaymentUseCaseTest {
        TESTE 3 — Gateway APPROVED não decide estado final
        ====================================================== */
     @Test
-    void should_call_gateway_and_keep_payment_processable() {
+    void should_delegate_final_status_decision_to_analyzer() {
 
         Payment payment = Payment.create(
                 "idem-approved",
                 new BigDecimal("100.00"),
                 "BRL"
         );
-        payment.setStatus(PaymentStatus.RECEIVED);
 
         when(paymentRepository.findByIdempotencyKey("idem-approved"))
                 .thenReturn(Optional.of(payment));
 
-        when(paymentRepository.tryAcquireLease(
-                eq("idem-approved"),
-                any(),
-                any()
-        )).thenReturn(1);
+        when(paymentLeasePolicy.canAttemptProcessing(any(), any(), any()))
+                .thenReturn(true);
 
-        when(fakePaymentGateway.process(payment))
+        when(paymentRepository.tryAcquireLease(any(), any(), any()))
+                .thenReturn(1);
+
+        when(fakePaymentGateway.process(any(PaymentGatewayRequest.class)))
                 .thenReturn(GatewayResult.APPROVED);
 
         when(paymentDataAnalyzer.dataAnalyzer(payment))
-                .thenReturn(PaymentStatus.RECEIVED);
+                .thenReturn(PaymentStatus.APPROVED);
 
-        useCase.execute("idem-approved");
+        useCase.execute("idem-approved", ActionOrigin.API);
 
-        // API NÃO decide estado final
-        assertEquals(PaymentStatus.RECEIVED, payment.getStatus());
+        assertEquals(PaymentStatus.APPROVED, payment.getStatus());
 
-        verify(fakePaymentGateway).process(payment);
-        verify(paymentRepository).findByIdempotencyKey("idem-approved");
-        verify(paymentRepository).tryAcquireLease(eq("idem-approved"), any(), any());
-        verify(fakePaymentGateway).process(payment);
         verify(paymentDataAnalyzer).dataAnalyzer(payment);
-
     }
+
 }
