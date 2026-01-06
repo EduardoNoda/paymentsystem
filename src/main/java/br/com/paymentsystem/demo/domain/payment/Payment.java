@@ -1,13 +1,11 @@
 package br.com.paymentsystem.demo.domain.payment;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.Type;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
