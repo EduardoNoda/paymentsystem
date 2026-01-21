@@ -4,15 +4,14 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 
 @Getter
-@Setter
 @Entity
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "payment")
@@ -55,13 +54,21 @@ public class Payment {
     public static Payment create(
             String idempotencyKey,
             BigDecimal amount,
-            String currency
+            String currency,
+            String clientSnapshot
     ) {
+
+        Objects.requireNonNull(amount, "Valor é obrigatório");
+        Objects.requireNonNull(currency, "Moeda é obrigatório");
+        Objects.requireNonNull(clientSnapshot, "Dados são obrigatórios");
+
         Payment p = new Payment();
         p.idempotencyKey = idempotencyKey;
         p.amount = amount;
         p.currency = currency;
-        p.status = PaymentStatus.TO_ANALYZE;
+        p.clientSnapshot = clientSnapshot;
+        p.status = PaymentStatus.RECEIVED;
+        p.createdAt = OffsetDateTime.now();
         return p;
     }
 
