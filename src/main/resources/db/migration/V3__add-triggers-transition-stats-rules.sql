@@ -11,7 +11,7 @@ BEGIN
         (OLD.status = 'TO_ANALYZE' AND NEW.status IN ('PROCESSING', 'CANCEL_ADMIN'))
     ) THEN
         RAISE EXCEPTION
-            'Invalid payment status transition %s -> %s for payment %I', OLD.status, NEW.status, OLD.id;
+            'Invalid payment status transition % -> % for payment %', OLD.status, NEW.status, OLD.id;
     END IF;
 
     RETURN NEW;
@@ -52,7 +52,7 @@ BEGIN
            OLD.status = 'PROCESSING' AND NEW.status IN ('APPROVED', 'RECUSED', 'FAIL')
         ) THEN
             RAISE EXCEPTION
-                'API not allowed to perform transition %s -> %s',
+                'API not allowed to perform transition % -> %',
                 OLD.status, NEW.status;
            END IF;
 
@@ -62,19 +62,19 @@ BEGIN
                 OLD.status = 'TO_ANALYZE' AND NEW.status = 'PROCESSING'
            ) THEN
                 RAISE EXCEPTION
-                    'JOB not allowed to perform transition %s -> %s',
+                    'JOB not allowed to perform transition % -> %',
                     OLD.status, NEW.status;
            END IF;
 
        ELSIF origin = 'ADMIN' THEN
            IF OLD.status <> 'TO_ANALYZE' THEN
                RAISE EXCEPTION
-                   'ADMIN not allowed to perform transition %s -> %s',
+                   'ADMIN not allowed to perform transition % -> %',
                    OLD.status, NEW.status;
            END IF;
 
        ELSE
-           RAISE EXCEPTION 'Unknown action origin: %s', origin;
+           RAISE EXCEPTION 'Unknown action origin: %', origin;
        END IF;
 
     RETURN NEW;
@@ -92,18 +92,31 @@ DECLARE
     origin TEXT;
 BEGIN
     IF OLD.status = NEW.status THEN
-        RETURN OLD;
+        RETURN NEW;
     END IF;
 
-    origin := current_action_origin();
+    origin := current_setting('app.action_origin', true);
 
-    IF origin <> 'ADMIN'
-        AND OLD.status IN ('PROCESSING', 'TO_ANALYZE')
-        AND OLD.lease_expires_at IS NOT NULL
-        AND OLD.lease_expires_at > now()
+    IF origin = 'ADMIN' THEN
+        RETURN NEW;
+    END IF;
+
+    -- JOB pode assumir PROCESSING expirado para TO_ANALYZE
+    IF origin = 'JOB'
+        AND OLD.status = 'PROCESSING'
+        AND NEW.status = 'TO_ANALYZE'
     THEN
+    -- permitido, mesmo sem lease
+        RETURN NEW;
+    END IF;
+
+    -- Regra geral: não mexe se lease ainda válido
+    IF OLD.lease_expires_at IS NOT NULL
+           AND OLD.lease_expires_at > now()
+           AND NOT (OLD.status= 'PROCESSING' AND NEW.status IN ('APPROVED', 'RECUSED', 'FAIL'))
+        THEN
         RAISE EXCEPTION
-            'Payment %s is locked until %L',
+            'Payment % is locked until %',
             OLD.id, OLD.lease_expires_at;
     END IF;
 
@@ -122,6 +135,13 @@ BEGIN
     IF OLD.status = NEW.status THEN
         RETURN OLD;
     END IF;
+
+    IF NEW.status = 'PROCESSING' THEN
+        IF NEW.lease_expires_at IS NULL THEN
+            NEW.lease_expires_at := now() + interval '5 minutes';
+        END IF;
+    END IF;
+
 
     NEW.updated_at := now();
 
@@ -168,3 +188,14 @@ CREATE TRIGGER trg_audit_payment_status_change
 AFTER UPDATE OF status ON payment
 FOR EACH ROW
 EXECUTE FUNCTION audit_payment_status_change();
+
+CREATE OR REPLACE PROCEDURE release_payment_lease(p_payment_id BIGINT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE payment
+       SET lease_expires_at = NULL
+     WHERE id = p_payment_id;
+END;
+$$;
+
