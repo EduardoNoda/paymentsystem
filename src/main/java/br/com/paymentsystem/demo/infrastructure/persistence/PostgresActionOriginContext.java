@@ -21,4 +21,17 @@ public class PostgresActionOriginContext implements ActionOriginContext {
                 .executeUpdate();
     }
 
+    @Override
+    public ActionOrigin get() {
+        String origin = (String) entityManager
+                .createNativeQuery("SELECT current_setting('app.action_origin', true)")
+                .getSingleResult();
+
+        if (origin == null) {
+            throw new IllegalStateException("Action origin not set");
+        }
+
+        return ActionOrigin.valueOf(origin);
+    }
+
 }
