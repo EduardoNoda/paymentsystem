@@ -1,8 +1,8 @@
 package br.com.paymentsystem.demo.application.payment.command;
 
 import br.com.paymentsystem.demo.application.payment.port.PaymentDataAnalyzer;
-import br.com.paymentsystem.demo.domain.payment.Payment;
 import br.com.paymentsystem.demo.domain.payment.PaymentStatus;
+import br.com.paymentsystem.demo.infrastructure.dto.GatewayData;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -11,9 +11,10 @@ import java.util.Set;
 
 public class DefaultPaymentDataAnalyzer implements PaymentDataAnalyzer {
 
-    private static Set<String> SUPPORTED_CURRENCIES = Set.of("BRL", "USD", "EUR");
+    private static final Set<String> SUPPORTED_CURRENCIES = Set.of("BRL", "USD", "EUR");
 
-    public PaymentStatus dataAnalyzer(Payment payment) {
+    @Override
+    public PaymentStatus dataAnalyzer(GatewayData payment) {
 
         if (payment.getAmount() == null ||
                 payment.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -30,10 +31,6 @@ public class DefaultPaymentDataAnalyzer implements PaymentDataAnalyzer {
             return PaymentStatus.RECUSED;
         }
 
-        if (payment.getStatus() != PaymentStatus.PROCESSING) {
-            return PaymentStatus.RECUSED;
-        }
-
         // validação de JSON
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -45,7 +42,7 @@ public class DefaultPaymentDataAnalyzer implements PaymentDataAnalyzer {
             }
 
         } catch (Exception e) {
-            throw new IllegalStateException("Erro técnico ao validar snapshot", e);
+            return PaymentStatus.RECUSED;
         }
 
         return PaymentStatus.APPROVED;
