@@ -33,13 +33,15 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
     void should_insert_payment() throws Exception {
 
         ObjectMapper mapper = new ObjectMapper();
-        Payment payment = Payment.create("idem-123", new BigDecimal("100.00"), "BRL");
-        payment.setClientSnapshot("""
-                    {"clientId": "123","origin":"API"}
-                """);
-        payment.setStatus(PaymentStatus.RECEIVED);
-        payment.setCreatedAt(OffsetDateTime.now());
-        payment.setUpdatedAt(OffsetDateTime.now());
+        Payment payment = Payment.create("idem-123",
+                new BigDecimal("100.00"),
+                "BRL",
+                """
+                        {
+                            "client-snapshot" : "snapshot"
+                        }
+                        """
+                );
 
         em.persist(payment);
         em.flush(); // força o insert no banco
@@ -71,11 +73,15 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
     @Test
     void should_fail_on_illegal_status_transition() {
         // cria pagamento válido
-        Payment payment = Payment.create("idem-transitor", new BigDecimal(80.00), "BRL");
-        payment.setClientSnapshot("{}");
-        payment.setStatus(PaymentStatus.RECEIVED);
-        payment.setCreatedAt(OffsetDateTime.now());
-        payment.setUpdatedAt(OffsetDateTime.now());
+        Payment payment = Payment.create("idem-transitor",
+                new BigDecimal(80.00),
+                "BRL",
+        """
+                    {
+                        "client-snapshot" : "snapshot"
+                    }
+                    """
+        );
 
         em.persist(payment);
         em.flush();
@@ -96,17 +102,22 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
 
     @Test
     void java_should_not_block_invalid_state_change() {
-        Payment payment = Payment.create("idem-java", new BigDecimal("30.00"), "BRL");
-        payment.setClientSnapshot("{}");
-        payment.setStatus(PaymentStatus.RECEIVED);
-        payment.setCreatedAt(OffsetDateTime.now());
-        payment.setUpdatedAt(OffsetDateTime.now());
+        Payment payment = Payment.create("idem-java",
+                new BigDecimal("30.00"),
+                "BRL",
+                """
+                    {
+                        "client-snapshot" : "snapshot"
+                    }
+                    """
+        );
 
         em.persist(payment);
         em.flush();
 
         // Java permite
-        payment.setStatus(PaymentStatus.APPROVED);
+        PaymentStatus status = PaymentStatus.APPROVED;
+
 
         // Banco decide
         assertThrows(PersistenceException.class, () -> em.flush());
@@ -114,20 +125,28 @@ public class PaymentPersistenceTest extends AbstractPostgresTest {
 
     @Test
     void should_fail_on_duplicate_idempotency_key() {
-        Payment firstPayment = Payment.create("idem-duplicated", new BigDecimal("50.00"), "BRL");
-        firstPayment.setClientSnapshot("{ }");
-        firstPayment.setStatus(PaymentStatus.RECEIVED);
-        firstPayment.setCreatedAt(OffsetDateTime.now());
-        firstPayment.setUpdatedAt(OffsetDateTime.now());
+        Payment firstPayment = Payment.create("idem-duplicated",
+                new BigDecimal("50.00"),
+                "BRL",
+                """
+                    {
+                        "client-snapshot" : "snapshot"
+                    }
+                    """
+        );
 
         em.persist(firstPayment);
         em.flush();
 
-        Payment duplicatePayment = Payment.create("idem-duplicated", new BigDecimal(50.00), "BRL");
-        duplicatePayment.setClientSnapshot("{ }");
-        duplicatePayment.setStatus(PaymentStatus.RECEIVED);
-        duplicatePayment.setCreatedAt(OffsetDateTime.now());
-        duplicatePayment.setUpdatedAt(OffsetDateTime.now());
+        Payment duplicatePayment = Payment.create("idem-duplicated",
+                new BigDecimal(50.00),
+                "BRL",
+                """
+                    {
+                        "client-snapshot" : "snapshot"
+                    }
+                    """
+        );
 
         em.persist(duplicatePayment);
         assertThrows(PersistenceException.class, () -> em.flush());

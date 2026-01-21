@@ -1,7 +1,6 @@
 package br.com.paymentsystem.demo.payment;
 
-import br.com.paymentsystem.demo.application.payment.command.PaymentLockManager;
-import br.com.paymentsystem.demo.application.payment.port.ActionOrigin;
+import br.com.paymentsystem.demo.application.payment.port.ActionOriginContext;
 import br.com.paymentsystem.demo.application.payment.port.GatewayResult;
 import br.com.paymentsystem.demo.application.payment.port.PaymentDataAnalyzer;
 import br.com.paymentsystem.demo.application.payment.usecase.ProcessPaymentUseCase;
@@ -13,6 +12,7 @@ import br.com.paymentsystem.demo.exception.GatewayCommunicationException;
 import br.com.paymentsystem.demo.exception.PaymentAlreadyBeingProcessException;
 import br.com.paymentsystem.demo.infrastructure.dto.PaymentGatewayRequest;
 import br.com.paymentsystem.demo.infrastructure.gateway.FakePaymentGateway;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,19 +38,19 @@ class ProcessPaymentUseCaseTest {
     FakePaymentGateway fakePaymentGateway;
 
     @Mock
-    PaymentLockManager paymentLockManager;
-
-    @Mock
     PaymentLeasePolicy paymentLeasePolicy;
 
     ProcessPaymentUseCase useCase;
 
+    ActionOriginContext actionOriginContext;
+
+
     @BeforeEach
     void setup() {
         useCase = new ProcessPaymentUseCase(
+                actionOriginContext,
                 paymentRepository,
                 fakePaymentGateway,
-                paymentLockManager,
                 paymentDataAnalyzer,
                 paymentLeasePolicy
         );
@@ -65,21 +65,21 @@ class ProcessPaymentUseCaseTest {
         Payment payment = Payment.create(
                 "idem-blocked",
                 new BigDecimal("100.00"),
-                "BRL"
+                "BRL",
+                """
+                        {
+                            "client-snapshot" : "snapshot"
+                        }
+                        """
         );
 
         when(paymentRepository.findByIdempotencyKey("idem-blocked"))
                 .thenReturn(Optional.of(payment));
 
-        when(paymentLeasePolicy.canAttemptProcessing(
-                eq(payment),
-                any(),
-                eq(ActionOrigin.API)
-        )).thenReturn(false);
 
         assertThrows(
                 PaymentAlreadyBeingProcessException.class,
-                () -> useCase.execute("idem-blocked", ActionOrigin.API)
+                () -> useCase.execute("idem-blocked")
         );
 
         verifyNoInteractions(fakePaymentGateway);
@@ -95,16 +95,19 @@ class ProcessPaymentUseCaseTest {
         Payment payment = Payment.create(
                 "idem-error",
                 new BigDecimal("50.00"),
-                "BRL"
+                "BRL",
+                """
+                        {
+                            "client-snapshot" : "snapshot"
+                        }
+                        """
         );
 
         when(paymentRepository.findByIdempotencyKey("idem-error"))
                 .thenReturn(Optional.of(payment));
 
-        when(paymentLeasePolicy.canAttemptProcessing(any(), any(), any()))
-                .thenReturn(true);
 
-        when(paymentRepository.tryAcquireLease(any(), any(), any()))
+        when(paymentRepository.tryAcquireLease(any(), any()))
                 .thenReturn(1);
 
         when(fakePaymentGateway.process(any(PaymentGatewayRequest.class)))
@@ -112,7 +115,7 @@ class ProcessPaymentUseCaseTest {
 
         assertThrows(
                 GatewayCommunicationException.class,
-                () -> useCase.execute("idem-error", ActionOrigin.API)
+                () -> useCase.execute("idem-error")
         );
 
         assertEquals(PaymentStatus.PROCESSING, payment.getStatus());
@@ -128,29 +131,29 @@ class ProcessPaymentUseCaseTest {
         Payment payment = Payment.create(
                 "idem-approved",
                 new BigDecimal("100.00"),
-                "BRL"
+                "BRL",
+                """
+                        {
+                            "client-snapshot" : "snapshot"
+                        }
+                        """
         );
 
         when(paymentRepository.findByIdempotencyKey("idem-approved"))
                 .thenReturn(Optional.of(payment));
 
-        when(paymentLeasePolicy.canAttemptProcessing(any(), any(), any()))
-                .thenReturn(true);
 
-        when(paymentRepository.tryAcquireLease(any(), any(), any()))
+        when(paymentRepository.tryAcquireLease(any(), any()))
                 .thenReturn(1);
 
         when(fakePaymentGateway.process(any(PaymentGatewayRequest.class)))
                 .thenReturn(GatewayResult.APPROVED);
 
-        when(paymentDataAnalyzer.dataAnalyzer(payment))
-                .thenReturn(PaymentStatus.APPROVED);
-
-        useCase.execute("idem-approved", ActionOrigin.API);
+        useCase.execute("idem-approved");
 
         assertEquals(PaymentStatus.APPROVED, payment.getStatus());
 
-        verify(paymentDataAnalyzer).dataAnalyzer(payment);
+
     }
 
 }

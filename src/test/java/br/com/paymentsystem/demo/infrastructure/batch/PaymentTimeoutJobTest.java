@@ -1,10 +1,12 @@
 package br.com.paymentsystem.demo.infrastructure.batch;
 
 import br.com.paymentsystem.demo.application.payment.port.ActionOrigin;
+import br.com.paymentsystem.demo.application.payment.port.ActionOriginContext;
 import br.com.paymentsystem.demo.domain.payment.Payment;
 import br.com.paymentsystem.demo.domain.payment.PaymentLeasePolicy;
 import br.com.paymentsystem.demo.domain.payment.PaymentRepository;
 import br.com.paymentsystem.demo.domain.payment.PaymentStatus;
+import br.com.paymentsystem.demo.infrastructure.transaction.ActionOriginTransaction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,11 +29,17 @@ class PaymentTimeoutJobTest {
     @Mock
     PaymentLeasePolicy leasePolicy;
 
+    @Mock
+    ActionOriginContext actionOriginContext;
+
+    @Mock
+    ActionOriginTransaction actionOriginTransaction;
+
     PaymentTimeoutJob job;
 
     @BeforeEach
     void setup() {
-        job = new PaymentTimeoutJob(paymentRepository, leasePolicy);
+        job = new PaymentTimeoutJob(paymentRepository, leasePolicy, actionOriginContext, actionOriginTransaction);
     }
 
     /* ======================================================
@@ -40,12 +48,12 @@ class PaymentTimeoutJobTest {
     @Test
     void should_do_nothing_when_no_processing_payments_are_expired() {
 
-        when(paymentRepository.findProcessingWithExpiredLease(any()))
+        when(paymentRepository.findProcessingWithExpiredLease())
                 .thenReturn(List.of());
 
         job.execute();
 
-        verify(paymentRepository).findProcessingWithExpiredLease(any());
+        verify(paymentRepository).findProcessingWithExpiredLease();
         verifyNoMoreInteractions(paymentRepository);
         verifyNoInteractions(leasePolicy);
     }
@@ -58,11 +66,8 @@ class PaymentTimeoutJobTest {
 
         Payment payment = baseProcessingPaymentExpired();
 
-        when(paymentRepository.findProcessingWithExpiredLease(any()))
+        when(paymentRepository.findProcessingWithExpiredLease())
                 .thenReturn(List.of(payment));
-
-        when(leasePolicy.calculateLeaseUntil(any(), eq(ActionOrigin.JOB)))
-                .thenReturn(now().plusMinutes(5));
 
         job.execute();
 
@@ -79,11 +84,8 @@ class PaymentTimeoutJobTest {
 
         OffsetDateTime expectedLease = now().plusMinutes(5);
 
-        when(paymentRepository.findProcessingWithExpiredLease(any()))
+        when(paymentRepository.findProcessingWithExpiredLease())
                 .thenReturn(List.of(payment));
-
-        when(leasePolicy.calculateLeaseUntil(any(), eq(ActionOrigin.JOB)))
-                .thenReturn(expectedLease);
 
         job.execute();
 
@@ -98,11 +100,9 @@ class PaymentTimeoutJobTest {
 
         Payment payment = baseProcessingPaymentExpired();
 
-        when(paymentRepository.findProcessingWithExpiredLease(any()))
+        when(paymentRepository.findProcessingWithExpiredLease())
                 .thenReturn(List.of(payment));
 
-        when(leasePolicy.calculateLeaseUntil(any(), eq(ActionOrigin.JOB)))
-                .thenReturn(now().plusMinutes(5));
 
         job.execute();
 
@@ -117,12 +117,11 @@ class PaymentTimeoutJobTest {
 
         Payment payment = baseProcessingPaymentExpired();
 
-        when(paymentRepository.findProcessingWithExpiredLease(any()))
+        when(paymentRepository.findProcessingWithExpiredLease())
                 .thenReturn(List.of(payment));
 
         job.execute();
 
-        verify(leasePolicy).calculateLeaseUntil(any(), eq(ActionOrigin.JOB));
     }
 
     /* ======================================================
@@ -133,10 +132,13 @@ class PaymentTimeoutJobTest {
         Payment p = Payment.create(
                 "idem-job",
                 null,
-                "BRL"
+                "BRL",
+                """
+                        {
+                            "client-snapshot" : "snapshot"
+                        }
+                        """
         );
-        p.setStatus(PaymentStatus.PROCESSING);
-        p.setLeaseExpiresAt(now().minusSeconds(10));
         return p;
     }
 

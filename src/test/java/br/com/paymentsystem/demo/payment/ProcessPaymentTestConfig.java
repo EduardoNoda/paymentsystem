@@ -1,6 +1,5 @@
 package br.com.paymentsystem.demo.payment;
 
-import br.com.paymentsystem.demo.application.payment.command.PaymentLockManager;
 import br.com.paymentsystem.demo.application.payment.port.ActionOriginContext;
 import br.com.paymentsystem.demo.application.payment.port.PaymentDataAnalyzer;
 import br.com.paymentsystem.demo.application.payment.port.PaymentGateway;
@@ -41,16 +40,16 @@ public class ProcessPaymentTestConfig {
     }
     @Bean
     public ProcessPaymentUseCase processPaymentUseCase(
+            ActionOriginContext actionOriginContext,
             PaymentRepository paymentRepository,
             PaymentGateway paymentGateway,
-            PaymentLockManager paymentLockManager,
             PaymentDataAnalyzer paymentDataAnalyzer,
             PaymentLeasePolicy paymentLeasePolicy
     ) {
         return new ProcessPaymentUseCase(
+                actionOriginContext,
                 paymentRepository,
                 paymentGateway,
-                paymentLockManager,
                 paymentDataAnalyzer,
                 paymentLeasePolicy
         );
