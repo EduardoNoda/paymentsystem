@@ -24,7 +24,4 @@ CREATE TABLE payment_audit (
     CHECK (
         action_origin IN ('API', 'JOB', 'ADMIN')
     )
-
-    CREATE INDEX idx_payment_audit_payment_id
-    ON payment_audit(payment_id, occurred_at DESC);
 );
