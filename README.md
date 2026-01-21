@@ -1,31 +1,57 @@
 # Sistema de Pagamento em Java
 [](https://github.com/EduardoNoda/paymentsystem#sistema-de-pagamentos-em-java)
+Este projeto implementa o núcleo de um sistema de processamento de pagamentos com cartão de crédito (simulado), com foco em consistência de estado, idempotência, controle de concorrência, safe retry e auditoria confiável, mesmo sob falhas de infraestrutura, timeouts e execuções concorrentes.
 
-Este projeto implementa o núcleo do processamento de pagamentos com cartão de crédito (simulado), focado em garantir consistência de estado e idempotência em cenários de falha, concorrência e requisições duplicadas.
+O objetivo não é integrar com meios de pagamento reais, mas modelar corretamente o problema, tratando o banco de dados como guardião das invariantes de domínio.
 
 # O Que o Sistema Resolve
 
 [](https://github.com/EduardoNoda/paymentsystem#o-que-o-sistema-resolve)
 
-O sistema visa solucionar problemas que geram requisições duplicadas devido a múltiplas solicitações de pagamento, causado por falhas de rede, timeout ou tentativa de retry.
+Este sistema resolve problemas clássicos de processamento de pagamentos, como:
 
-Isso é solucionado garantindo que a mesma intenção de pagamento seja processada uma única vez. Requisições duplicadas sempre retornam o mesmo resultado, independente da quantidade de solicitações
+-  Requisições duplicadas causadas por:
 
-Em caso de falhas no sistema, é persistido o estado atual do pagamento antes e após o processamento, sendo utilizado para garantir repostas consistentes e preservar a integridade de dados do cliente.
+   - falhas de rede
 
+   -  timeouts
+
+   - retries automáticos
+
+   - concorrência entre múltiplas execuções
+
+- Processamentos interrompidos no meio da execução
+
+- Estados inconsistentes causados por falhas parciais
+
+- A solução garante que:
+
+   - A mesma intenção de pagamento é processada uma única vez
+
+   - Requisições duplicadas retornam sempre o mesmo resultado
+
+   - Falhas nunca geram aprovações indevidas
+
+   - O estado do pagamento é persistido e auditado em todas as transições
 # O Que o Sistema Não Faz
 
 [](https://github.com/EduardoNoda/paymentsystem#o-que-o-sistema-não-faz)
 
-. Não processa dinheiro real
+Este projeto deliberadamente não implementa:
 
-. Não integra com bancos ou operadoras
+- Processamento de dinheiro real
 
-. Não implementa antifraude
+- Integração com bancos ou operadoras
 
-. Não gerencia usuários
+- Antifraude
 
-. Não realiza estornos ou chargebacks
+- Gestão de usuários
+
+- Estornos ou chargebacks
+
+- Comunicação externa real com gateways
+
+O foco está exclusivamente no design correto do domínio e da infraestrutura de estado.
 
 # Estados Possíveis de Pagamento
 
@@ -48,56 +74,78 @@ Em caso de falhas no sistema, é persistido o estado atual do pagamento antes e 
 # Transições de Estado Possíveis e Impossíveis
 
 Possíveis:
-RECEBIDO -> PROCESSANDO
-PROCESSANDO -> APROVADO
-PROCESSANDO -> RECUSADO
-PROCESSANDO -> FALHA
-PROCESSANDO -> EM_ANALISE
-EM_ANALISE -> PROCESSANDO
-EM_ANALISE -> CANCELADO_ADMINISTRADOR
+
+- RECEBIDO -> PROCESSANDO
+
+- PROCESSANDO -> APROVADO
+
+- PROCESSANDO -> RECUSADO
+
+- PROCESSANDO -> FALHA
+
+- PROCESSANDO -> EM_ANALISE
+
+- EM_ANALISE -> PROCESSANDO
+
+- EM_ANALISE -> CANCELADO_ADMINISTRADOR
 
 Impossíveis:
-RECEBIDO -> APROVADO
-RECEBIDO -> RECUSADO
-RECEBIDO -> FALHA
-RECEBIDO -> EM_ANALISE
-RECEBIDO -> CANCELADO_ADMINISTRADOR
-EM_ANALISE -> APROVADO
-EM_ANALISE -> RECUSADO
-EM_ANALISE -> FALHA
+
+- RECEBIDO -> APROVADO
+
+- RECEBIDO -> RECUSADO
+
+- RECEBIDO -> FALHA
+
+- RECEBIDO -> EM_ANALISE
+
+- RECEBIDO -> CANCELADO_ADMINISTRADOR
+
+- EM_ANALISE -> APROVADO
+
+- EM_ANALISE -> RECUSADO
+
+- EM_ANALISE -> FALHA
+
 APROVADO; RECUSADO; FALHA; CANCELADO_ADMINISTRADOR são estados finais imutáveis, uma vez determinados não devem ser alterados.
-
-# Modelo de Domínio
-
-[](https://github.com/EduardoNoda/paymentsystem#modelo-de-domínio)
-
-## Entidade: pagamento
-
-[](https://github.com/EduardoNoda/paymentsystem#entidade-pagamento)
-
-Tarefa única de cobrar um valor do cliente, pode ser processada uma única vez retornando exatamente um estado final.
-
-### Atributos
-
-[](https://github.com/EduardoNoda/paymentsystem#atributos)
-
-A entidade deve conter identificador único de acesso, uma chave lógica de pagamento para garantir que duas ou mais requisições tenham o mesmo resultado, o valor e a moeda que serão processados, os estados transitórios ou finais, data de criação e de finalização do processo para controle de linha do tempo.
-
-Sendo assim, devem ser atributos imutáveis: valor, moeda e estado do pagamento.
 
 # Garantias do Sistema
 
 [](https://github.com/EduardoNoda/paymentsystem#garantias-do-sistema)
 
-. Um pagamento nunca pode ser aprovado duas vezes.
+- Um pagamento nunca pode ser aprovado duas vezes.
 
-. Requisições duplicadas geram o mesmo resultado.
+- Requisições duplicadas geram o mesmo resultado.
 
-. Falhas no sistema não gera aprovações.
+- Falhas no sistema não gera aprovações.
 
-. Pagamentos nunca mudam de estado.
+- Pagamentos nunca mudam de estado.
 
-. Estado inconsistente resulta em falha.
+- Estado inconsistente resulta em falha.
+
+# Auditoria de Estado
+
+Toda mudança de status é auditada automaticamente no banco de dados.
+
+## Características
+
+- Auditoria feita via trigger SQL
+
+- Nenhuma dependência de código de aplicação
+
+- Registro contém:
+
+   - ID do pagamento
+
+   - Novo status
+
+   - Origem da ação (API / JOB / ADMIN)
+
+   - Descrição da transição
+
+   - Timestamp
+
+Isso garante auditoria confiável mesmo em falhas inesperadas da aplicação.
 
 # Modelo de Autoridade
 
@@ -134,85 +182,3 @@ O job detecta solicitações em processo com lease expirado, muda status atual p
 [](https://github.com/EduardoNoda/paymentsystem#intervenção-humana)
 
 A intervenção humana possui autoridade excepcional, o desenvolvedor pode analisar o relatório gerado pelo job, resolver o problmea ou cancelar adminstrativamente (CANCELADO_ADMINISTRADOR).
-
-
-
-
-
-# Pseudocódigo
-
-    TIPO STATUS: ENUM (
-        PROCESSANDO;
-        EM_ANALISE;
-        APROVADO;
-        RECUSADO;
-        FALHA;
-        CANCELADO_ADMINSTRADOR
-    )
-
-    VAR
-
-        solicitacao: REGISTRO
-            id: INTEIRO
-            chave_idempontecia: INTEIRO
-            dados_pagamento: REGISTRO
-            status_atual: STATUS
-        FIM_REGISTRO
-
-        resultado: STATUS
-
-    FUNCAO pagamento(solicitacao): solicitacao
-    INICIO
-
-        solicitacao.status_atual <- STATUS.RECEBIDO
-        
-        INICIAR_TRANSACAO
-        
-        // verifica existencia da solicitação a partir da chave_idempotencia via restrição no banco de
-        // dados (constranint), se ja existe, retorna o resultado atual da primeira solicitação e fina-
-        // liza a funcao pagamento
-        SE existe chave_idempotencia ENTAO
-            SE solicitacao.status_atual = APROVADO ou RECUSADO ou FALHA ENTAO (xOU)
-                retorna solicitacao.status_atual
-            FIMSE
-
-            SE solicitacao.status_atual = PROCESSANDO ENTAO
-                SE lease não expirou ENTAO
-                    COMMIT
-                    retorne solicitacao.status_atual
-                    
-                SENAO SE lease expirou ENTAO
-                    renovar lease
-
-                FIMSE
-            FIMSE
-        FIMSE
-
-        
-
-        // se for possível inserir solicitação, se não for possível, o fluxo deve retornar
-        solicitacao.status_atual = PROCESSANDO
-        atribuir lease (1m)
-
-        TENTAR
-            // chama gateway para aprovação ou não do pagamento, retornando resultado
-            resultado <- gateway(solicitacao.dados_pagamento)
-
-            solicitacao.status <- resultado 
-    
-            COMMIT
-            retorne solicitacao.status
-        CAPTURAR
-            // se houve erro técnico inesperado
-            propagar erro
-        FIM
-
-    FIMFUNCAO
-
-    FUNCAO gateway(requisicao)
-    INICIO
-
-    1. regra de negocio do sistema
-    2. retorna FALHA, APROVADO ou RECUSADO
-
-    FIMFUNCAO
