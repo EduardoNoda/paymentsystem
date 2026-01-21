@@ -1,13 +1,21 @@
 package br.com.paymentsystem.demo.domain.payment;
 
 import br.com.paymentsystem.demo.application.payment.port.ActionOrigin;
+import br.com.paymentsystem.demo.infrastructure.persistence.PostgresActionOriginContext;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.Set;
 
+@Component
 public class PaymentLeasePolicy {
+
+    private final PostgresActionOriginContext postgresActionOriginContext;
+
+    public PaymentLeasePolicy (PostgresActionOriginContext postgresActionOriginContext) {
+        this.postgresActionOriginContext = postgresActionOriginContext;
+    }
 
     private final Set<PaymentStatus> FINAL_STATE = EnumSet.of(
         PaymentStatus.APPROVED,
@@ -15,23 +23,6 @@ public class PaymentLeasePolicy {
         PaymentStatus.FAIL,
         PaymentStatus.CANCEL_ADMIN
     );
-
-    public boolean canAttemptProcessing(
-            Payment payment,
-            OffsetDateTime now,
-            ActionOrigin origin
-    ) {
-
-        if(FINAL_STATE.contains(payment.getStatus())){
-            return false;
-        }
-
-        if(payment.getStatus() == PaymentStatus.RECEIVED) {
-            return true;
-        }
-
-        return isLeaseExpired(payment, now);
-    }
 
     public Duration leaseDurationFor(ActionOrigin origin) {
         return switch (origin){
@@ -41,19 +32,4 @@ public class PaymentLeasePolicy {
         };
     }
 
-    public OffsetDateTime calculateLeaseUntil (
-            OffsetDateTime now,
-            ActionOrigin origin
-    ) {
-        return now.plus(leaseDurationFor(origin));
-    }
-
-    public boolean isLeaseExpired(Payment payment, OffsetDateTime now) {
-        OffsetDateTime leaseUntil = payment.getLeaseExpiresAt();
-        return leaseUntil == null || leaseUntil.isBefore(now);
-    }
-
-    public boolean isLeaseState(PaymentStatus status) {
-        return FINAL_STATE.contains(status);
-    }
 }
